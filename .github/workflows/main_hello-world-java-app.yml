@@ -22,7 +22,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '25'
-          distribution: 'microsoft'
+          distribution: 'temurin'
 
       - name: Build with Maven
         run: mvn clean install
@@ -51,4 +51,5 @@ jobs:
           slot-name: 'Production'
           package: '*.war'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_376B55C5166748239D2C0E95F3E041E0 }}
+
 
