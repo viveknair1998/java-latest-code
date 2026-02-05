@@ -1,24 +1,20 @@
 
-name: Build and deploy WAR app to Azure Web App - hello-world-java-app
+name: Build and Deploy WAR app to Azure Web App - hello-world-java-app
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
+  workflow_dispatch:
 
 env:
-  # If your Maven project is at repo root, set this to "."
-  # If your project is in a folder (example from your logs), set it to "java-latest-code"
-  APP_PATH: java-latest-code
-
-  ARTIFACT_NAME: java-app
-  ARTIFACT_DIR: artifact
+  # ✅ IMPORTANT: set this to '.' if pom.xml is in repo root
+  APP_PATH: "java-latest-code"
+  ARTIFACT_NAME: "java-app"
+  ARTIFACT_DIR: "artifact"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,23 +26,27 @@ jobs:
           distribution: "temurin"
           cache: maven
 
-      - name: Build with Maven (WAR)
-        working-directory: ${{ env.APP_PATH }}
-        run: mvn -B clean package
+      - name: Validate working directory exists
+        run: |
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          echo "Listing repo root:"
+          ls -la
+          echo "Listing APP_PATH (${APP_PATH}):"
+          ls -la "${APP_PATH}"
 
-      # ✅ This step tells us whether WAR or JAR was actually created and where.
+      - name: Build with Maven (WAR)
+        run: mvn -B clean package
+        working-directory: ${{ env.APP_PATH }}
+
       - name: Verify build output
         run: |
-          echo "Repo root: $(pwd)"
-          echo "APP_PATH: ${{ env.APP_PATH }}"
-          echo "Listing target folder:"
-          ls -la "${{ env.APP_PATH }}/target" || true
-          echo "Finding WAR/JAR:"
-          find "${{ env.APP_PATH }}" -maxdepth 4 -type f \( -name "*.war" -o -name "*.jar" \) -print || true
+          echo "Target folder:"
+          ls -la target || true
+          echo "WAR/JAR files:"
+          find target -maxdepth 2 -type f \( -name "*.war" -o -name "*.jar" \) -print || true
+        working-directory: ${{ env.APP_PATH }}
 
-      # ✅ IMPORTANT: upload-artifact runs from repo root, so use repo-root-relative path.
-      # This avoids the classic "No files found" even though the file exists. [1](https://docs.hunters.ai/docs/connect-data-through-azure-event-hub)
-      - name: Upload artifact (WAR)
+      - name: Upload WAR artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
@@ -56,7 +56,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
-
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
@@ -65,9 +64,7 @@ jobs:
           path: ${{ env.ARTIFACT_DIR }}
 
       - name: List downloaded files
-        run: |
-          echo "Downloaded artifact contents:"
-          ls -R "${{ env.ARTIFACT_DIR }}"
+        run: ls -R "${ARTIFACT_DIR}"
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
