@@ -2,39 +2,55 @@
 name: Build and deploy WAR app to Azure Web App - hello-world-java-app
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+  push:
+    branches:
+      - main
+
+env:
+  # If your Maven project is at repo root, set this to "."
+  # If your project is in a folder (example from your logs), set it to "java-latest-code"
+  APP_PATH: java-latest-code
+
+  ARTIFACT_NAME: java-app
+  ARTIFACT_DIR: artifact
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Set up Java version
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          java-version: '25'
-          distribution: 'temurin'
+          java-version: "25"
+          distribution: "temurin"
+          cache: maven
 
-      - name: Build with Maven
+      - name: Build with Maven (WAR)
+        working-directory: ${{ env.APP_PATH }}
         run: mvn -B clean package
 
+      # ✅ This step tells us whether WAR or JAR was actually created and where.
       - name: Verify build output
         run: |
-          ls -la
-          ls -la target || true
-          find . -maxdepth 4 -type f \( -name "*.war" -o -name "*.jar" \) -print
+          echo "Repo root: $(pwd)"
+          echo "APP_PATH: ${{ env.APP_PATH }}"
+          echo "Listing target folder:"
+          ls -la "${{ env.APP_PATH }}/target" || true
+          echo "Finding WAR/JAR:"
+          find "${{ env.APP_PATH }}" -maxdepth 4 -type f \( -name "*.war" -o -name "*.jar" \) -print || true
 
-      - name: Upload artifact for deployment job
+      # ✅ IMPORTANT: upload-artifact runs from repo root, so use repo-root-relative path.
+      # This avoids the classic "No files found" even though the file exists. [1](https://docs.hunters.ai/docs/connect-data-through-azure-event-hub)
+      - name: Upload artifact (WAR)
         uses: actions/upload-artifact@v4
         with:
-          name: java-app
-          path: target/*.war
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.APP_PATH }}/target/*.war
           if-no-files-found: error
 
   deploy:
@@ -42,19 +58,21 @@ jobs:
     needs: build
 
     steps:
-      - name: Download artifact from build job
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: java-app
-          path: artifact
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_DIR }}
 
       - name: List downloaded files
-        run: ls -R artifact
+        run: |
+          echo "Downloaded artifact contents:"
+          ls -R "${{ env.ARTIFACT_DIR }}"
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: hello-world-java-app
-          slot-name: Production
-          package: artifact/**/*.war
+          app-name: "hello-world-java-app"
+          slot-name: "Production"
+          package: "${{ env.ARTIFACT_DIR }}/*.war"
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_376B55C5166748239D2C0E95F3E041E0 }}
